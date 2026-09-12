@@ -1,0 +1,6 @@
+{
+  "name": "Lite Pro Cam",
+  "description": "Professional manual camera with advanced exposure dials, AI scene detection, RAW/DNG, video, cinematic LUT filters, and post-processing suite.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
