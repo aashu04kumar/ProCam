@@ -8,8 +8,8 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.media.AudioManager
 import android.media.CamcorderProfile
-import android.media.MediaActionSound
 import android.media.MediaRecorder
 import android.net.Uri
 import android.util.Log
@@ -47,9 +47,9 @@ import java.util.concurrent.Executors
 class CameraManager(private val context: Context) : SensorEventListener {
 
     private val cameraExecutor: ExecutorService = Executors.newSingleThreadExecutor()
-    private val soundPlayer: MediaActionSound? by lazy {
+    private val audioManager by lazy {
         try {
-            MediaActionSound().apply { load(MediaActionSound.SHUTTER_CLICK) }
+            context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
         } catch (_: Throwable) {
             null
         }
@@ -102,16 +102,27 @@ class CameraManager(private val context: Context) : SensorEventListener {
     private val _isFrontCamera = MutableStateFlow(false)
     val isFrontCamera: StateFlow<Boolean> = _isFrontCamera.asStateFlow()
 
+    private var cachedBackEncoderSupported: Boolean? = null
+    private var cachedFrontEncoderSupported: Boolean? = null
+
     private fun isHardwareVideoEncoderSupported(): Boolean {
-        return try {
-            val cameraId = if (_isFrontCamera.value) 1 else 0
-            CamcorderProfile.hasProfile(cameraId, CamcorderProfile.QUALITY_LOW) ||
-            CamcorderProfile.hasProfile(cameraId, CamcorderProfile.QUALITY_HIGH) ||
-            CamcorderProfile.hasProfile(cameraId, CamcorderProfile.QUALITY_480P) ||
-            CamcorderProfile.hasProfile(cameraId, CamcorderProfile.QUALITY_720P)
+        val isFront = _isFrontCamera.value
+        if (isFront && cachedFrontEncoderSupported != null) return cachedFrontEncoderSupported!!
+        if (!isFront && cachedBackEncoderSupported != null) return cachedBackEncoderSupported!!
+
+        val supported = try {
+            val cameraId = if (isFront) 1 else 0
+            CamcorderProfile.hasProfile(cameraId, CamcorderProfile.QUALITY_LOW)
         } catch (_: Throwable) {
             false
         }
+
+        if (isFront) {
+            cachedFrontEncoderSupported = supported
+        } else {
+            cachedBackEncoderSupported = supported
+        }
+        return supported
     }
 
     fun startSensors() {
@@ -348,7 +359,9 @@ class CameraManager(private val context: Context) : SensorEventListener {
 
     fun playShutterSound(enableSound: Boolean) {
         if (enableSound) {
-            try { soundPlayer?.play(MediaActionSound.SHUTTER_CLICK) } catch (_: Exception) {}
+            try {
+                audioManager?.playSoundEffect(AudioManager.FX_KEY_CLICK)
+            } catch (_: Throwable) {}
         }
     }
 
@@ -545,7 +558,6 @@ class CameraManager(private val context: Context) : SensorEventListener {
     fun release() {
         stopSensors()
         unbindCamera()
-        try { soundPlayer?.release() } catch (_: Exception) {}
         try { cameraExecutor.shutdown() } catch (_: Exception) {}
     }
 }
